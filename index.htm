@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>네이버 부동산 매물번호 조회</title>
+  <style>
+    :root{
+      --bg:#0b0d12; --panel:#121622; --card:#171c2a;
+      --text:#e8ecf3; --muted:#9aa6bb; --border:#26304a;
+      --accent:#2e4aa6;
+      --field:#0f1320;
+      --btn:#0f1320;
+      --btnPrimary:#1a2a56;
+    }
+
+    [data-theme="light"]{
+      --bg:#f4f6fb; --panel:#ffffff; --card:#ffffff;
+      --text:#111827; --muted:#6b7280; --border:#d7dce8;
+      --accent:#2e4aa6;
+      --field:#f7f9ff;
+      --btn:#f7f9ff;
+      --btnPrimary:#e7eeff;
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",sans-serif;
+      background:var(--bg);
+      color:var(--text);
+    }
+
+    /* ===== Desktop 기본: 5:5 ===== */
+    .app{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      min-height:100vh;
+      min-height:100dvh; /* 모바일 주소창 고려 */
+    }
+
+    .left{
+      border-right:1px solid var(--border);
+      background:var(--panel);
+      padding:16px;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      overflow:auto;
+    }
+    .right{
+      padding:18px;
+      overflow:auto;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+
+    .headerRow{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:12px;
+    }
+
+    .title{ font-size:16px; font-weight:700; margin:0; }
+    .sub{ font-size:12px; color:var(--muted); margin:6px 0 0; line-height:1.4; }
+
+    .group, .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:12px;
+    }
+
+    label{
+      display:block;
+      font-size:12px;
+      color:var(--muted);
+      margin-bottom:6px;
+    }
+
+    input{
+      width:100%;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:var(--field);
+      color:var(--text);
+      padding:10px 12px;
+      font-size:14px;
+      outline:none;
+    }
+    input:focus{ border-color: var(--accent); }
+
+    input::placeholder{
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans KR",sans-serif;
+      font-size:14px;
+      color:var(--muted);
+      opacity:1;
+    }
+
+    .row{
+      display:flex;
+      gap:8px;
+      margin-top:10px;
+      flex-wrap:wrap;
+    }
+
+    button{
+      border:1px solid var(--border);
+      background:var(--btn);
+      color:var(--text);
+      padding:10px 12px;
+      border-radius:10px;
+      cursor:pointer;
+      font-size:13px;
+      flex:1;
+      min-width:110px;
+      touch-action:manipulation;
+    }
+    button.primary{
+      background:var(--btnPrimary);
+      border-color:var(--accent);
+    }
+    button.small{
+      flex:0 0 auto;
+      padding:8px 10px;
+      font-size:12px;
+      min-width:auto;
+    }
+    button:disabled{
+      opacity:.55;
+      cursor:not-allowed;
+    }
+    button:hover{ filter:brightness(1.05); }
+
+    .h{ margin:0 0 8px; font-size:15px; font-weight:700; }
+
+    .kv{
+      display:grid;
+      grid-template-columns:140px 1fr;
+      gap:8px;
+      font-size:13px;
+      align-items:start;
+    }
+    .k{ color:var(--muted); }
+    .v{ word-break:break-all; }
+    .mono{ font-family:ui-monospace,Menlo,Consolas,monospace; }
+
+    .hint{ font-size:12px; color:var(--muted); line-height:1.5; margin:8px 0 0; }
+    a{ color:#9cc0ff; text-decoration:none; }
+    a:hover{ text-decoration:underline; }
+
+    .toast{
+      margin-top:10px;
+      font-size:12px;
+      color:var(--muted);
+      min-height:16px;
+    }
+
+    /* 테마 라벨 */
+    .themeBox{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex:0 0 auto;
+    }
+    .themeLabel{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:2px;
+      white-space:nowrap;
+    }
+
+    /* ===== Responsive (모바일/태블릿) ===== */
+    @media (max-width: 960px){
+      .app{
+        grid-template-columns: 1fr;      /* 1열 */
+        grid-template-rows: auto auto;   /* 위: 입력 / 아래: 결과 */
+      }
+
+      .left{
+        border-right:none;
+        border-bottom:1px solid var(--border);
+        padding:14px;
+      }
+      .right{
+        padding:14px;
+      }
+
+      .headerRow{
+        align-items:flex-start;
+      }
+
+      /* 결과 영역의 kv는 모바일에서 1열로 */
+      .kv{
+        grid-template-columns: 1fr;
+        gap:6px;
+      }
+      .k{
+        margin-top:6px;
+      }
+
+      /* 버튼이 너무 잘게 쪼개지지 않게 */
+      button{
+        min-width: 140px;
+      }
+    }
+
+    /* 더 작은 화면(폰)에서는 버튼을 거의 1행 1버튼처럼 */
+    @media (max-width: 480px){
+      .headerRow{
+        flex-direction:column;
+        align-items:stretch;
+        gap:10px;
+      }
+      .themeBox{
+        justify-content:flex-end;
+      }
+      .row{
+        flex-direction:column;
+      }
+      button{
+        min-width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<div class="app">
+  <!-- 좌측 -->
+  <aside class="left">
+    <div class="headerRow">
+      <div>
+        <p class="title">네이버 부동산 매물번호 조회</p>
+        <p class="sub">
+          1) 매물번호 입력(Enter 가능) → 매물 보기<br>
+          2) URL/ms/좌표 입력(Enter 가능) → 지도 열기
+        </p>
+      </div>
+
+      <div class="themeBox" aria-label="테마 전환 영역">
+        <span class="themeLabel">테마</span>
+        <button type="button" class="small" id="btnTheme" aria-label="테마 전환">밝은 모드</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <label for="articleNo">매물번호</label>
+      <input id="articleNo" placeholder="예) 2000000000" inputmode="numeric" autocomplete="off">
+      <div class="row">
+        <button type="button" class="primary" id="btnOpenArticle">매물 보기</button>
+        <button type="button" id="btnCopyArticle" disabled>링크 복사</button>
+      </div>
+      <p class="hint">입력만 해도 우측에 링크가 생성됩니다. (숫자만 자동 유지)</p>
+    </div>
+
+    <div class="group">
+      <label for="redirectInput">매물위치 찾기 → URL 또는 ms/좌표</label>
+      <input id="redirectInput" placeholder="예) https://new.land.naver.com/...ms=37.35,126.95,16 또는 ms=... 또는 37.35,126.95,16">
+      <div class="row">
+        <button type="button" class="primary" id="btnOpenMap">지도 열기</button>
+      </div>
+      <p class="hint">
+        URL 전체 / <span class="mono">ms=...</span> / <span class="mono">위도,경도,줌</span> 모두 가능<br>
+        Enter → 지도 열기
+      </p>
+    </div>
+
+    <div class="toast" id="toast" aria-live="polite"></div>
+  </aside>
+
+  <!-- 우측 -->
+  <main class="right">
+    <section class="card" aria-label="매물 링크 영역">
+      <p class="h">매물 링크</p>
+      <div class="kv">
+        <div class="k">URL</div>
+        <div class="v">
+          <a id="articleLink" target="_blank" rel="noopener noreferrer">-</a>
+        </div>
+      </div>
+      <p class="hint">좌측에서 매물번호를 입력하면 자동으로 링크가 생성됩니다.</p>
+    </section>
+
+    <section class="card" aria-label="지도 영역">
+      <p class="h">지도</p>
+      <div class="kv">
+        <div class="k">좌표</div>
+        <div class="v mono" id="latlng">-</div>
+        <div class="k">지도 URL</div>
+        <div class="v">
+          <a id="mapLink" target="_blank" rel="noopener noreferrer">-</a>
+        </div>
+      </div>
+      <p class="hint">좌측에서 URL/ms/좌표를 입력하면 자동으로 링크가 생성됩니다.</p>
+    </section>
+  </main>
+</div>
+
+<script>
+(() => {
+  // ---------- DOM ----------
+  const $ = (id) => document.getElementById(id);
+
+  const el = Object.freeze({
+    toast: $("toast"),
+    btnTheme: $("btnTheme"),
+
+    articleNo: $("articleNo"),
+    btnOpenArticle: $("btnOpenArticle"),
+    btnCopyArticle: $("btnCopyArticle"),
+    articleLink: $("articleLink"),
+
+    redirectInput: $("redirectInput"),
+    btnOpenMap: $("btnOpenMap"),
+    latlng: $("latlng"),
+    mapLink: $("mapLink"),
+  });
+
+  // ---------- Toast ----------
+  const uiToast = (() => {
+    let t = null;
+    return (msg) => {
+      el.toast.textContent = msg || "";
+      window.clearTimeout(t);
+      if (!msg) return;
+      t = window.setTimeout(() => { el.toast.textContent = ""; }, 2200);
+    };
+  })();
+
+  // ---------- Theme ----------
+  const theme = (() => {
+    const KEY = "quickArticleTheme";
+
+    function getPreferred(){
+      const saved = localStorage.getItem(KEY);
+      if (saved === "dark" || saved === "light") return saved;
+      const prefersLight = window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
+      return prefersLight ? "light" : "dark";
+    }
+
+    function apply(next){
+      document.documentElement.setAttribute("data-theme", next);
+      el.btnTheme.textContent = (next === "dark") ? "밝은 모드" : "어두운 모드";
+      localStorage.setItem(KEY, next);
+    }
+
+    function toggle(){
+      const cur = document.documentElement.getAttribute("data-theme") || "dark";
+      apply(cur === "dark" ? "light" : "dark");
+    }
+
+    return { getPreferred, apply, toggle };
+  })();
+
+  // ---------- Utils / Parsers ----------
+  const sanitizeDigits = (s) => (s ?? "").toString().replace(/\D/g, "");
+
+  const extractMsParam = (rawText) => {
+    const text = (rawText || "").trim();
+    if (!text) return null;
+
+    // 1) URL 파싱
+    try{
+      const u = new URL(text);
+      const ms = u.searchParams.get("ms");
+      if (ms) return ms;
+    } catch (_) {}
+
+    // 2) 문장/URL 안의 ms= 추출
+    const m = text.match(/(?:\?|&|#)\s*ms=([^&\s#]+)/i);
+    if (m && m[1]) return m[1];
+
+    // 3) "ms=..." 단독
+    const m2 = text.match(/\bms=([^\s&#]+)/i);
+    if (m2 && m2[1]) return m2[1];
+
+    // 4) 전체가 좌표일 때만 허용 (오매칭 방지)
+    const onlyCoord = text.match(/^\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)(?:\s*,\s*(\d+(?:\.\d+)?))?\s*$/);
+    if (onlyCoord) {
+      const lat = Number(onlyCoord[1]);
+      const lng = Number(onlyCoord[2]);
+      const z = onlyCoord[3] ? Number(onlyCoord[3]) : null;
+      if (Number.isFinite(lat) && Number.isFinite(lng) && (z === null || Number.isFinite(z))) {
+        return z === null ? `${lat},${lng}` : `${lat},${lng},${z}`;
+      }
+    }
+
+    return null;
+  };
+
+  const parseLatLngZoom = (msValue) => {
+    let v = (msValue || "").trim();
+    try { v = decodeURIComponent(v); } catch (_) {}
+
+    const parts = v.split(",").map(x => x.trim()).filter(Boolean);
+    if (parts.length < 2) return null;
+
+    const lat = Number(parts[0]);
+    const lng = Number(parts[1]);
+    const zoom = (parts.length >= 3) ? Number(parts[2]) : null;
+
+    if(!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+    if(zoom !== null && !Number.isFinite(zoom)) return null;
+    if(lat < -90 || lat > 90 || lng < -180 || lng > 180) return null;
+
+    return { lat, lng, zoom };
+  };
+
+  // ---------- URL Builders ----------
+  const buildArticleUrl = (articleNo) =>
+    `https://new.land.naver.com?articleNo=${encodeURIComponent(articleNo)}`;
+
+  const buildMapUrl = ({ lat, lng, title = "매물위치" }) =>
+    `https://map.naver.com/?lng=${encodeURIComponent(lng)}&lat=${encodeURIComponent(lat)}&title=${encodeURIComponent(title)}`;
+
+  // ---------- Actions ----------
+  const openInNewTab = (url) => {
+    const w = window.open(url, "_blank", "noopener,noreferrer");
+    if (!w) uiToast("팝업이 차단되었습니다. 우측 링크를 클릭해 열어주세요.");
+  };
+
+  const copyToClipboard = async (text) => {
+    try{
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+      uiToast("복사했습니다.");
+    } catch (_) {
+      uiToast("복사에 실패했습니다.");
+    }
+  };
+
+  // ---------- State + Render ----------
+  function computeArticleState(){
+    const articleNo = sanitizeDigits(el.articleNo.value);
+    if (!articleNo) return { isValid:false, articleNo:"", url:"" };
+    return { isValid:true, articleNo, url: buildArticleUrl(articleNo) };
+  }
+
+  function renderArticle(state){
+    if (!state.isValid) {
+      el.articleLink.removeAttribute("href");
+      el.articleLink.textContent = "-";
+      el.btnCopyArticle.disabled = true;
+      return;
+    }
+    el.articleLink.href = state.url;
+    el.articleLink.textContent = state.url;
+    el.btnCopyArticle.disabled = false;
+  }
+
+  function computeMapState(){
+    const raw = el.redirectInput.value;
+    const msValue = extractMsParam(raw);
+    if (!msValue) return { isValid:false, lat:null, lng:null, url:"" };
+
+    const parsed = parseLatLngZoom(msValue);
+    if (!parsed) return { isValid:false, lat:null, lng:null, url:"" };
+
+    const { lat, lng } = parsed;
+    return { isValid:true, lat, lng, url: buildMapUrl({ lat, lng, title:"매물위치" }) };
+  }
+
+  function renderMap(state){
+    if (!state.isValid) {
+      el.latlng.textContent = "-";
+      el.mapLink.removeAttribute("href");
+      el.mapLink.textContent = "-";
+      return;
+    }
+    el.latlng.textContent = `${state.lat}, ${state.lng}`;
+    el.mapLink.href = state.url;
+    el.mapLink.textContent = state.url;
+  }
+
+  function syncAll(){
+    renderArticle(computeArticleState());
+    renderMap(computeMapState());
+  }
+
+  // ---------- Events ----------
+  function bindEvents(){
+    // Theme
+    el.btnTheme.addEventListener("click", theme.toggle);
+
+    // Article input
+    el.articleNo.addEventListener("input", () => {
+      const cleaned = sanitizeDigits(el.articleNo.value);
+      if (el.articleNo.value !== cleaned) el.articleNo.value = cleaned;
+      renderArticle(computeArticleState());
+    });
+
+    el.articleNo.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") el.btnOpenArticle.click();
+    });
+
+    el.btnOpenArticle.addEventListener("click", () => {
+      const st = computeArticleState();
+      if (!st.isValid) return uiToast("매물번호를 입력하세요.");
+      renderArticle(st);
+      openInNewTab(st.url);
+    });
+
+    el.btnCopyArticle.addEventListener("click", () => {
+      const href = el.articleLink.href;
+      if (!href || el.articleLink.textContent === "-") return uiToast("복사할 링크가 없습니다.");
+      copyToClipboard(href);
+    });
+
+    // Map input
+    el.redirectInput.addEventListener("input", () => {
+      renderMap(computeMapState());
+    });
+
+    el.redirectInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        el.btnOpenMap.click();
+      }
+    });
+
+    el.btnOpenMap.addEventListener("click", () => {
+      const raw = el.redirectInput.value;
+      const msValue = extractMsParam(raw);
+      if(!msValue) return uiToast("ms(위도,경도,줌) 값을 찾지 못했습니다.");
+
+      const parsed = parseLatLngZoom(msValue);
+      if(!parsed) return uiToast("좌표 형식이 올바르지 않습니다. (예: ms=37.35,126.95,16)");
+
+      const st = computeMapState();
+      renderMap(st);
+      openInNewTab(st.url);
+    });
+  }
+
+  // ---------- Init ----------
+  theme.apply(theme.getPreferred());
+  bindEvents();
+  syncAll();
+})();
+</script>
+
+</body>
+</html>
