@@ -172,6 +172,45 @@
       white-space:nowrap;
     }
 
+    /* ===== Recent chips ===== */
+    .recentRow{
+      margin-top:10px;
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+    .recentHead{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:8px;
+    }
+    .recentLabel{
+      font-size:12px;
+      color:var(--muted);
+    }
+    .recentChips{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+    }
+    .chip{
+      border:1px solid var(--border);
+      background:var(--btn);
+      color:var(--text);
+      padding:8px 10px;
+      border-radius:999px;
+      font-size:12px;
+      cursor:pointer;
+      line-height:1;
+      flex:0 0 auto;
+    }
+    .chip:hover{ filter:brightness(1.05); }
+    .chip:disabled{
+      opacity:.55;
+      cursor:default;
+    }
+
     /* ===== Responsive (모바일/태블릿) ===== */
     @media (max-width: 960px){
       .app{
@@ -253,6 +292,16 @@
         <button type="button" class="primary" id="btnOpenArticle">매물 보기</button>
         <button type="button" id="btnCopyArticle" disabled>링크 복사</button>
       </div>
+
+      <!-- 최근 매물번호 (A안: 칩 5개) -->
+      <div class="recentRow" aria-label="최근 매물번호">
+        <div class="recentHead">
+          <span class="recentLabel">최근</span>
+          <button type="button" class="small" id="btnClearRecent" title="최근기록 삭제" disabled>전체삭제</button>
+        </div>
+        <div class="recentChips" id="recentChips"></div>
+      </div>
+
       <p class="hint">입력만 해도 우측에 링크가 생성됩니다. (숫자만 자동 유지)</p>
     </div>
 
@@ -260,11 +309,12 @@
       <label for="redirectInput">매물위치 찾기 → URL 또는 ms/좌표</label>
       <input id="redirectInput" placeholder="예) https://new.land.naver.com/...ms=37.35,126.95,16 또는 ms=... 또는 37.35,126.95,16">
       <div class="row">
-        <button type="button" class="primary" id="btnOpenMap">지도 열기</button>
+	<button type="button" class="primary" id="btnOpenNaverMap">네이버 지도 열기</button>
+	<button type="button" class="primary" id="btnOpenKakaoMap">카카오맵 열기</button>
       </div>
       <p class="hint">
         URL 전체 / <span class="mono">ms=...</span> / <span class="mono">위도,경도,줌</span> 모두 가능<br>
-        Enter → 지도 열기
+        Enter → 네이버 지도 열기
       </p>
     </div>
 
@@ -289,9 +339,15 @@
       <div class="kv">
         <div class="k">좌표</div>
         <div class="v mono" id="latlng">-</div>
-        <div class="k">지도 URL</div>
+
+        <div class="k">네이버 지도 URL</div>
         <div class="v">
-          <a id="mapLink" target="_blank" rel="noopener noreferrer">-</a>
+          <a id="naverMapLink" target="_blank" rel="noopener noreferrer">-</a>
+        </div>
+
+        <div class="k">카카오맵 URL</div>
+        <div class="v">
+          <a id="kakaoMapLink" target="_blank" rel="noopener noreferrer">-</a>
         </div>
       </div>
       <p class="hint">좌측에서 URL/ms/좌표를 입력하면 자동으로 링크가 생성됩니다.</p>
@@ -313,10 +369,17 @@
     btnCopyArticle: $("btnCopyArticle"),
     articleLink: $("articleLink"),
 
+    // Recent
+    btnClearRecent: $("btnClearRecent"),
+    recentChips: $("recentChips"),
+
     redirectInput: $("redirectInput"),
-    btnOpenMap: $("btnOpenMap"),
+    btnOpenNaverMap: $("btnOpenNaverMap"),
+    btnOpenKakaoMap: $("btnOpenKakaoMap"),
+
     latlng: $("latlng"),
-    mapLink: $("mapLink"),
+    naverMapLink: $("naverMapLink"),
+    kakaoMapLink: $("kakaoMapLink"),
   });
 
   // ---------- Toast ----------
@@ -413,8 +476,86 @@
   const buildArticleUrl = (articleNo) =>
     `https://new.land.naver.com?articleNo=${encodeURIComponent(articleNo)}`;
 
-  const buildMapUrl = ({ lat, lng, title = "매물위치" }) =>
+  const buildNaverMapUrl = ({ lat, lng, title = "매물위치" }) =>
     `https://map.naver.com/?lng=${encodeURIComponent(lng)}&lat=${encodeURIComponent(lat)}&title=${encodeURIComponent(title)}`;
+
+  const buildKakaoMapUrl = ({ lat, lng, title = "매물위치" }) =>
+    `https://map.kakao.com/link/map/${encodeURIComponent(title)},${encodeURIComponent(lat)},${encodeURIComponent(lng)}`;
+
+  // ---------- Recent (localStorage) ----------
+  const recent = (() => {
+    const KEY = "recentArticleNos";
+    const MAX = 5;
+
+    function load(){
+      try{
+        const raw = localStorage.getItem(KEY);
+        const arr = raw ? JSON.parse(raw) : [];
+        if (!Array.isArray(arr)) return [];
+        const cleaned = [];
+        for (const x of arr) {
+          const d = sanitizeDigits(x);
+          if (!d) continue;
+          if (!cleaned.includes(d)) cleaned.push(d);
+          if (cleaned.length >= MAX) break;
+        }
+        return cleaned;
+      } catch (_) {
+        return [];
+      }
+    }
+
+    function save(articleNo){
+      const d = sanitizeDigits(articleNo);
+      if (!d) return load();
+
+      const cur = load();
+      const next = [d, ...cur.filter(x => x !== d)].slice(0, MAX);
+
+      try{
+        localStorage.setItem(KEY, JSON.stringify(next));
+      } catch (_) {}
+      return next;
+    }
+
+    function clear(){
+      try{ localStorage.removeItem(KEY); } catch (_) {}
+      return [];
+    }
+
+    function render(list){
+      const arr = Array.isArray(list) ? list : load();
+      el.recentChips.innerHTML = "";
+
+      if (arr.length === 0){
+        const span = document.createElement("span");
+        span.className = "hint";
+        span.style.margin = "0";
+        span.textContent = "최근 기록이 없습니다.";
+        el.recentChips.appendChild(span);
+        el.btnClearRecent.disabled = true;
+        return;
+      }
+
+      el.btnClearRecent.disabled = false;
+
+      for (const no of arr){
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "chip";
+        b.textContent = no;
+        b.addEventListener("click", () => {
+          el.articleNo.value = no;
+          renderArticle(computeArticleState());
+          uiToast("최근 매물번호를 불러왔습니다.");
+          el.articleNo.focus();
+        });
+        el.recentChips.appendChild(b);
+      }
+    }
+
+    return { load, save, clear, render };
+  })();
 
   // ---------- Actions ----------
   const openInNewTab = (url) => {
@@ -465,25 +606,37 @@
   function computeMapState(){
     const raw = el.redirectInput.value;
     const msValue = extractMsParam(raw);
-    if (!msValue) return { isValid:false, lat:null, lng:null, url:"" };
+    if (!msValue) return { isValid:false, lat:null, lng:null, naverUrl:"", kakaoUrl:"" };
 
     const parsed = parseLatLngZoom(msValue);
-    if (!parsed) return { isValid:false, lat:null, lng:null, url:"" };
+    if (!parsed) return { isValid:false, lat:null, lng:null, naverUrl:"", kakaoUrl:"" };
 
     const { lat, lng } = parsed;
-    return { isValid:true, lat, lng, url: buildMapUrl({ lat, lng, title:"매물위치" }) };
+    const naverUrl = buildNaverMapUrl({ lat, lng, title:"매물위치" });
+    const kakaoUrl = buildKakaoMapUrl({ lat, lng, title:"매물위치" });
+
+    return { isValid:true, lat, lng, naverUrl, kakaoUrl };
   }
 
   function renderMap(state){
     if (!state.isValid) {
       el.latlng.textContent = "-";
-      el.mapLink.removeAttribute("href");
-      el.mapLink.textContent = "-";
+
+      el.naverMapLink.removeAttribute("href");
+      el.naverMapLink.textContent = "-";
+
+      el.kakaoMapLink.removeAttribute("href");
+      el.kakaoMapLink.textContent = "-";
       return;
     }
+
     el.latlng.textContent = `${state.lat}, ${state.lng}`;
-    el.mapLink.href = state.url;
-    el.mapLink.textContent = state.url;
+
+    el.naverMapLink.href = state.naverUrl;
+    el.naverMapLink.textContent = state.naverUrl;
+
+    el.kakaoMapLink.href = state.kakaoUrl;
+    el.kakaoMapLink.textContent = state.kakaoUrl;
   }
 
   function syncAll(){
@@ -495,6 +648,12 @@
   function bindEvents(){
     // Theme
     el.btnTheme.addEventListener("click", theme.toggle);
+
+    // Recent clear
+    el.btnClearRecent.addEventListener("click", () => {
+      recent.render(recent.clear());
+      uiToast("최근 기록을 삭제했습니다.");
+    });
 
     // Article input
     el.articleNo.addEventListener("input", () => {
@@ -511,6 +670,11 @@
       const st = computeArticleState();
       if (!st.isValid) return uiToast("매물번호를 입력하세요.");
       renderArticle(st);
+
+      // Save recent (on open)
+      const nextList = recent.save(st.articleNo);
+      recent.render(nextList);
+
       openInNewTab(st.url);
     });
 
@@ -528,11 +692,11 @@
     el.redirectInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") {
         e.preventDefault();
-        el.btnOpenMap.click();
+        el.btnOpenNaverMap.click(); // Enter는 네이버 지도 열기로
       }
     });
 
-    el.btnOpenMap.addEventListener("click", () => {
+    el.btnOpenNaverMap.addEventListener("click", () => {
       const raw = el.redirectInput.value;
       const msValue = extractMsParam(raw);
       if(!msValue) return uiToast("ms(위도,경도,줌) 값을 찾지 못했습니다.");
@@ -542,7 +706,20 @@
 
       const st = computeMapState();
       renderMap(st);
-      openInNewTab(st.url);
+      openInNewTab(st.naverUrl);
+    });
+
+    el.btnOpenKakaoMap.addEventListener("click", () => {
+      const raw = el.redirectInput.value;
+      const msValue = extractMsParam(raw);
+      if(!msValue) return uiToast("ms(위도,경도,줌) 값을 찾지 못했습니다.");
+
+      const parsed = parseLatLngZoom(msValue);
+      if(!parsed) return uiToast("좌표 형식이 올바르지 않습니다. (예: ms=37.35,126.95,16)");
+
+      const st = computeMapState();
+      renderMap(st);
+      openInNewTab(st.kakaoUrl);
     });
   }
 
@@ -550,6 +727,7 @@
   theme.apply(theme.getPreferred());
   bindEvents();
   syncAll();
+  recent.render(recent.load());
 })();
 </script>
 
